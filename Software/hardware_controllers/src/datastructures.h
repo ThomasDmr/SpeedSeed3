@@ -9,10 +9,12 @@ typedef struct CurrentStatus
    float fan2_hz;
    float max_tmp;
    float min_tmp;
+   float water_volume;
    float max_humidity;
    int visible_lux;
    int missed_temp_reads;
    int missed_lux_reads;
+   int soil_moisture;
    bool peltier_cool_status;
    bool next_peltier_cool_status;
    bool new_data;

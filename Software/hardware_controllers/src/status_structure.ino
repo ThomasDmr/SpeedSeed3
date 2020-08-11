@@ -44,11 +44,15 @@ void status_print(struct CurrentStatus * cs){
   Serial.print(",");
   print_value_float("max_tmp", cs->max_tmp);
   Serial.print(",");
+  print_value_float("water_volume", cs->water_volume);
+  Serial.print(",");
   print_value_float("min_tmp", cs->min_tmp);
   Serial.print(",");
   print_value_bool("light", cs->light);
   Serial.print(",");
   print_value_int("visible_lux", cs->visible_lux);
+  Serial.print(",");
+  print_value_int("soil_moisture", cs->soil_moisture);
   Serial.print(",");
   print_value_int("missed_temp_reads", cs->missed_temp_reads);
   Serial.print(",");
@@ -63,6 +67,8 @@ void status_print(struct CurrentStatus * cs){
 
 void status_read_environment(struct CurrentStatus * cs){
   float hum, temp;
+  int moisture; 
+
   if(cs->bme280){
     hum  = bme280_humidity();
     temp = bme280_temperature();
@@ -73,6 +79,9 @@ void status_read_environment(struct CurrentStatus * cs){
     hum  = dht_humidity();
     temp = dht_temperature();
   }
+
+  moisture = constrain(analogRead(PIN_MOISTURE_SENSOR), MOISTURE_WATER, MOISTURE_AIR);
+  moisture = map(moisture, MOISTURE_WATER, MOISTURE_AIR, 100, 0);
 
   if(!isnan(hum)){
     cs->humidity = hum;
@@ -86,6 +95,19 @@ void status_read_environment(struct CurrentStatus * cs){
 
   if( isnan(temp)){
     cs-> missed_temp_reads = cs-> missed_temp_reads + 1;
+  }
+
+  if(!isnan(moisture)){
+    static uint32_t temps = millis();
+    if(millis() - temps > 1000)
+    {
+      DEBUG_PRINTLN("Moisture: " + String(moisture));
+      DEBUG_PRINTLN("Temp: " + String(temp));
+      DEBUG_PRINTLN("Humidity: " + String(hum));
+      temps = millis();
+    }
+
+    cs->soil_moisture = moisture;
   }
 
 }
@@ -239,6 +261,53 @@ void status_control_light(struct CurrentStatus * cs){
       cs->missed_lux_reads += 1;
     }
 */
+}
+
+void status_control_pump(struct CurrentStatus * cs)
+{
+  const int           min_moisture = 10; // moisture level under which the pump starts
+  const unsigned long pump_run_time = 5000; // time during which the pump runs
+  const unsigned int  min_pump_interval = 20000; // time the system waits between two pumping sessions
+
+  static unsigned long pump_start_time = 0;
+  static unsigned long pump_last_run_time = 0;
+
+  if(pump_start_time != 0 && millis() - pump_start_time > pump_run_time)
+  {
+    DEBUG_PRINTLN("STOP PUMP");
+    relay_off(PIN_PUMP);
+    pump_start_time = 0;
+    cs->water_volume += 0.028 * (float)pump_run_time / 1000;
+    pump_last_run_time = millis();
+  }
+  else if(pump_start_time != 0)
+  {
+    //pump is still running
+    static uint32_t temps3 = millis();
+    if(millis() - temps3 > 500)
+    {
+      DEBUG_PRINTLN("Pump Running");
+      temps3 = millis();
+    }
+  }
+  else if(cs->soil_moisture < min_moisture && millis() - pump_last_run_time > min_pump_interval)
+  {
+    DEBUG_PRINTLN("START PUMP " + String(cs->soil_moisture));
+    relay_on(PIN_PUMP);
+    pump_start_time = millis();
+  }
+  else
+  {
+    static uint32_t temps2 = millis();
+    if(millis() - temps2 > 2000)
+    {
+      DEBUG_PRINTLN("Pump Off");
+      temps2 = millis();
+    }
+
+    relay_off(PIN_PUMP);
+    pump_start_time = 0;
+  }
 }
 
 void status_control_humidity(struct CurrentStatus * cs){
