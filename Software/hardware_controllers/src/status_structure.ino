@@ -46,6 +46,8 @@ void status_print(struct CurrentStatus * cs){
   Serial.print(",");
   print_value_float("water_volume", cs->water_volume);
   Serial.print(",");
+  print_value_float("water_volume_2", cs->water_volume_2);
+  Serial.print(",");
   print_value_float("min_tmp", cs->min_tmp);
   Serial.print(",");
   print_value_bool("light", cs->light);
@@ -53,6 +55,8 @@ void status_print(struct CurrentStatus * cs){
   print_value_int("visible_lux", cs->visible_lux);
   Serial.print(",");
   print_value_int("soil_moisture", cs->soil_moisture);
+  Serial.print(",");
+  print_value_int("soil_moisture_2", cs->soil_moisture_2);
   Serial.print(",");
   print_value_int("missed_temp_reads", cs->missed_temp_reads);
   Serial.print(",");
@@ -67,7 +71,8 @@ void status_print(struct CurrentStatus * cs){
 
 void status_read_environment(struct CurrentStatus * cs){
   float hum, temp;
-  int moisture; 
+  int moisture;
+  int moisture_2; 
 
   if(cs->bme280){
     hum  = bme280_humidity();
@@ -82,6 +87,9 @@ void status_read_environment(struct CurrentStatus * cs){
 
   moisture = constrain(analogRead(PIN_MOISTURE_SENSOR), MOISTURE_WATER, MOISTURE_AIR);
   moisture = map(moisture, MOISTURE_WATER, MOISTURE_AIR, 100, 0);
+
+  moisture_2 = constrain(analogRead(PIN_MOISTURE_SENSOR_2), MOISTURE_WATER, MOISTURE_AIR);
+  moisture_2 = map(moisture_2, MOISTURE_WATER, MOISTURE_AIR, 100, 0);
 
   if(!isnan(hum)){
     cs->humidity = hum;
@@ -102,12 +110,17 @@ void status_read_environment(struct CurrentStatus * cs){
     if(millis() - temps > 1000)
     {
       DEBUG_PRINTLN("Moisture: " + String(moisture));
+      DEBUG_PRINTLN("Moisture 2: " + String(moisture_2));
       DEBUG_PRINTLN("Temp: " + String(temp));
       DEBUG_PRINTLN("Humidity: " + String(hum));
       temps = millis();
     }
 
     cs->soil_moisture = moisture;
+  }
+
+  if(!isnan(moisture_2)){
+    cs->soil_moisture_2 = moisture_2;
   }
 
 }
@@ -306,6 +319,53 @@ void status_control_pump(struct CurrentStatus * cs)
     }
 
     relay_off(PIN_PUMP);
+    pump_start_time = 0;
+  }
+}
+
+void status_control_pump_2(struct CurrentStatus * cs)
+{
+  const int           min_moisture = 10; // moisture level under which the pump starts
+  const unsigned long pump_run_time = 5000; // time during which the pump runs
+  const unsigned int  min_pump_interval = 20000; // time the system waits between two pumping sessions
+
+  static unsigned long pump_start_time = 0;
+  static unsigned long pump_last_run_time = 0;
+
+  if(pump_start_time != 0 && millis() - pump_start_time > pump_run_time)
+  {
+    DEBUG_PRINTLN("STOP PUMP 2");
+    relay_off(PIN_PUMP_2);
+    pump_start_time = 0;
+    cs->water_volume_2 += 0.028 * (float)pump_run_time / 1000;
+    pump_last_run_time = millis();
+  }
+  else if(pump_start_time != 0)
+  {
+    //pump is still running
+    static uint32_t temps3 = millis();
+    if(millis() - temps3 > 500)
+    {
+      DEBUG_PRINTLN("Pump 2 Running");
+      temps3 = millis();
+    }
+  }
+  else if(cs->soil_moisture_2 < min_moisture && millis() - pump_last_run_time > min_pump_interval)
+  {
+    DEBUG_PRINTLN("START PUMP 2 " + String(cs->soil_moisture_2));
+    relay_on(PIN_PUMP_2);
+    pump_start_time = millis();
+  }
+  else
+  {
+    static uint32_t temps2 = millis();
+    if(millis() - temps2 > 2000)
+    {
+      DEBUG_PRINTLN("Pump 2 Off");
+      temps2 = millis();
+    }
+
+    relay_off(PIN_PUMP_2);
     pump_start_time = 0;
   }
 }

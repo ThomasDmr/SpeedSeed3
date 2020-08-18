@@ -24,11 +24,13 @@
 #define PIN_PELTIER_2      5 //Relay Shield (3)
 #define PIN_HUMIDITY_FAN 6 //Relay Shield (2)
 #define PIN_PELTIER_3      7 //Relay Shield (1)
-#define PIN_LIGHT        9
+#define PIN_LIGHT        3
 #define PIN_PUMP    8
+#define PIN_PUMP_2  9
 
 #define PIN_TMP_SENSOR   A2 //A2
-#define PIN_MOISTURE_SENSOR A0
+#define PIN_MOISTURE_SENSOR   A0
+#define PIN_MOISTURE_SENSOR_2 A1
 
 #define MOISTURE_AIR 580
 #define MOISTURE_WATER 320
@@ -71,6 +73,7 @@ void setup() {
   relay_setup(PIN_HUMIDITY_FAN);
   relay_setup(PIN_LIGHT);
   relay_setup(PIN_PUMP);
+  relay_setup(PIN_PUMP_2);
 //  TSL2561.init();
 if(!bme280 && !bmp280){
   dht_setup();
@@ -96,6 +99,8 @@ if(!bme280 && !bmp280){
   cs.bmp280 = bmp280;
   cs.water_volume = 0;
   cs.soil_moisture = 0;
+  cs.water_volume_2 = 0;
+  cs.soil_moisture_2 = 0;
   status_clear_in_buffer();
   //Serial.print("Done setup");
 
@@ -113,6 +118,8 @@ void loop() {
   status_control_light(&cs);
 
   status_control_pump(&cs);
+
+  status_control_pump_2(&cs);
   
   cs.started_up = true;
   //Serial.print(".");
